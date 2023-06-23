@@ -1,0 +1,400 @@
+# Data analysis Biofortified Cassava Andean region
+
+
+```{r}
+rm(list = ls())
+library(pacman)
+pacman::p_load(tidyverse, 
+               fauxnaif, 
+               readxl, 
+               yarrr, 
+               statgenSTA, 
+               statgenGxE, 
+               openxlsx, 
+               QBMS, 
+               agriutilities, 
+               #asreml, 
+               SpATS, 
+               ggsci,
+               lubridate,
+               magrittr,
+               corrplot)
+source("https://raw.githubusercontent.com/Cassava2050/PPD/main/utilities_tidy.R")
+
+trial_interest <- "andina"
+year_interest <- 2022
+```
+
+## master_data to save the results
+
+```{r}
+master_data <- list()
+```
+
+## Load the tidy data
+
+```{r}
+trial_set_number = 1
+# all files in the folder
+list_file = list.files(here::here("output"))
+# tidy data of the trials interested
+sel_file = list_file[str_detect(list_file, "_tidy_data4analysis_") &
+                       str_detect(list_file,
+                                  paste(year_interest, trial_interest, sep=""))]
+# the data we will use
+sel_file_use = sel_file[1]
+
+sel_file_use
+trial1_tidy = read.csv(here::here("output", sel_file_use), header=TRUE,
+                        stringsAsFactors = FALSE,
+                        as.is=T,
+                        check.names = FALSE)
+if(trial_set_number == 1){
+  trial_tidy_all = trial1_tidy
+}
+
+# remove empty cols
+
+trial_tidy_all <- trial_tidy_all[, colSums(is.na(trial_tidy_all)) < nrow(trial_tidy_all)]
+```
+
+## Obtain all the trait information using a cloud file (gitHub) -------
+
+```{r}
+trait_all <-
+  read.csv("https://raw.githubusercontent.com/lfdelgadom/standar_col_names_CB/main/standar_col_names.csv") %>%
+  dplyr::select(analysis_col_name) %>%
+  filter(str_detect(analysis_col_name, "obs_"))
+trait_all_adj <- gsub("obs_", "", trait_all$analysis_col_name)
+trait_all_adj = c(trait_all_adj,
+                  "harvest_number_plan", "germination_perc",
+                  "yield_ha_v2", "DM_yield_ha", "starch_content")
+trait_all_adj <- gsub("-", "_", trait_all_adj)
+```
+
+## Meta info.
+
+```{r}
+meta_all <-
+  read.csv("https://raw.githubusercontent.com/lfdelgadom/standar_col_names_CB/main/standar_col_names.csv") %>%
+  dplyr::select(analysis_col_name) %>%
+  filter(str_detect(analysis_col_name, "use_"))
+meta_all_adj <- gsub("use_", "", meta_all$analysis_col_name)
+meta_all_adj <- c(
+  meta_all_adj,
+  "check_released", "latitude", "longitude",
+  "altitude", "department", "country",
+  "ag_zone", "location_short"
+)
+```
+
+## Select the observations for analysis
+
+```{r}
+names(trial_tidy_all) <- gsub("-", "_", names(trial_tidy_all))
+analysis_trait <- names(trial_tidy_all)[names(trial_tidy_all) %in% trait_all_adj]
+print("All the traits investigated:")
+print(analysis_trait)
+```
+
+## Select the meta information for analysis
+
+```{r}
+meta_col <- names(trial_tidy_all)[names(trial_tidy_all) %in% meta_all_adj]
+print("All the meta information:")
+print(meta_col)
+```
+
+```{r}
+
+# trial_tidy_all <- 
+#   trial_tidy_all %>% filter(!trial_name %in% c("201784BCPRC_cpal", "201895BCPRC_cpal"))
+
+#pop = "CQ"
+pop = "BC"
+```
+
+
+## Cooking quality population
+
+```{r}
+if(pop == "CQ") { 
+  genotypes <- c("SM3553-27", "GM3790-2", "SM3106-14", "SM1127-8_is_Cubana", "PER183", "GM214-62", "P13")
+  trial_tidy <- trial_tidy_all %>% filter(accession_name %in% genotypes)
+}else{
+  genotypes <- c("SM3677-74", "GM3650-51", "GM3594-70", "P13")
+  trial_tidy <- trial_tidy_all %>% filter(accession_name %in% genotypes)
+}
+```
+
+## Evaluated clones 
+
+```{r}
+trial_tidy$accession_name %>% unique() %>% as.data.frame() %>% 
+  write.table("clipboard", sep = "\t", col.names = T, row.names = F)
+```
+
+
+## Check the SD of each trait
+
+```{r}
+trial_rm_sd <- remove_no_var_tidy(my_dat = trial_tidy,
+                   analysis_trait = analysis_trait,
+                   meta_info = meta_col)
+master_data[[paste("mean_of_sd", pop, sep = "_")]] = sd_mean
+
+trial_rm_sd$trial_name %>% unique()
+
+```
+
+## Trait ideal
+
+```{r}
+no_traits_for_analysis <- c("stake_plant" , "planted_number_plot", 
+                            "harvest_number", "root_weight_air", 
+                            "root_weight_water", "harvest_number_plan",
+                            "yield_ha_v2", "root_rot_perc", "root_rot_number",
+                            "root_weight_commercial", "root_weight_plot",
+                            "shoot_weight_plot", "germinated_number_plot"
+)
+trait_ideal <- analysis_trait[!analysis_trait %in% no_traits_for_analysis]
+print("the trait ideal is:"); trait_ideal
+
+sort(trait_ideal) %>% as.data.frame() %>% 
+  write.table("clipboard", sep = "\t", col.names = T, row.names = F)
+```
+
+## AED boxplot
+
+```{r}
+plot_bxp <- trial_rm_sd %>%
+  pivot_longer(
+    cols = all_of(trait_ideal),
+    names_to = "var",
+    values_to = "values"
+  ) %>%
+  #filter(accession_name == "GM214-62") %>% 
+  ggplot(aes(x = trial_name, y = values)) +
+  facet_grid(var~accession_name,
+    scales = "free"
+  ) +
+  #geom_violin(trim = FALSE, aes(fill = accession_name)) +
+  geom_boxplot(aes(shape = accession_name, fill = accession_name)) +
+  labs(x = NULL, y = NULL, title = "") +
+  theme_xiaofei() +
+  theme(
+    axis.text.x = element_text(size = 8, vjust = 1),
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(color = "black"),
+    strip.text.x = element_text(
+      size = 5, face = "bold.italic")
+  ) 
+plot_bxp <- plot_bxp + 
+  theme(strip.text.y = element_text(size = 5))
+
+# ggsave(paste("images\\boxplot", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+#     plot = plot_bxp, units = "in", dpi = 300, width = 20, height = 16
+#   )
+```
+
+
+
+# Genotypic correlation (Phenotypic values)
+
+```{r}
+correlation <- gg_cor(
+  colours = c("red", "white", "blue"),
+  data = trial_rm_sd[, trait_ideal],
+  label_size = 2
+  )
+# ggsave(paste("images\\pheno_corr", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+#      plot = correlation, units = "in", dpi = 300, width = 12, height = 8
+#    )
+```
+
+## Check design experimental
+
+### Agriutilities library
+
+```{r}
+my_dat <- trial_rm_sd %>% 
+  add_column(block = NA) %>% mutate(block = as.factor(block))
+
+
+
+results <- check_design_met(
+  data = my_dat, 
+  genotype = "accession_name",
+  trial = "trial_name",
+  traits = trait_ideal,
+  rep = "rep_number",
+  col = "col_number",
+  row = "row_number",
+  block = "block"
+)
+
+my_dat$trial_name %>% unique()
+
+shared <- plot(results, type = "connectivity")
+
+# ggsave(paste('images\\shared_', trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+#        plot = shared, units = "in", dpi = 300, width = 8, height = 6)
+
+summary <- results$summ_traits 
+
+p1 <- summary %>% 
+  ggplot(aes(x = traits , y = trial_name, label = round(miss_perc,2),  fill = miss_perc ))+
+  geom_tile(color = "gray")+
+  geom_text(color = "white")+
+  theme_minimal(base_size = 13)+
+  labs(title = "Percentage of missing values (exp/trait)", x = "", y = "") +
+  theme(axis.text.x = element_text(hjust = 1 , angle = 45, size = 16),
+        axis.text.y = element_text(size = 16))
+p1
+# ggsave(paste("images\\missing_", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+#      plot = p1, units = "in", dpi = 300, width = 15, height = 6
+#    )
+master_data[[paste("summ_traits", pop, sep = "_")]] <- summary
+```
+
+## AOV and post anova analysis
+
+```{r message=FALSE, warning=FALSE}
+library(agricolae)
+library(broom)
+
+my_dat <- my_dat %>% 
+  mutate(row_fct = as.factor(row_number),
+         col_fct = as.factor(col_number),
+         accession_name = as.factor(accession_name),
+         rep_number = as.factor(rep_number),
+         trial_name = as.factor(trial_name))
+
+
+# List of variables for ANOVA
+variables <- trait_ideal[-c(5, 9)]
+
+# Run ANOVA for each variable using a for loop
+for (variable in variables) {
+  
+  eqt_fixed <- reformulate(c("accession_name", "trial_name", "accession_name:trial_name", "rep_number", 
+                           "rep_number:row_fct", "rep_number:col_fct"), 
+                         response = variable)
+  
+  # Run ANOVA and 
+  anova_result <- aov(eqt_fixed, data = my_dat)
+  out <- HSD.test(anova_result,"accession_name")
+  
+     
+  out_trial <- HSD.test(anova_result,"trial_name")
+
+  
+  # Store the result in the list
+  # anova tables
+  master_data[[paste("aov", variable, pop, sep = "_") ]] <- 
+    tidy(anova_result) %>% mutate(across(where(is.double), round, 3))
+  
+  #HSD clones
+  master_data[[paste("HSD_geno", variable, pop, sep = "_") ]] <- 
+    out$groups %>% rownames_to_column("accession_name") %>% 
+    pivot_longer(variable, names_to = "trait", values_to = "mean") %>% 
+    mutate(across(where(is.double), round, 3))
+  
+  # HSD localities
+  master_data[[paste("HSD_loca", variable, pop, sep = "_") ]] <- 
+    out_trial$groups %>% rownames_to_column("trial_name") %>% 
+    mutate(across(where(is.double), round, 3))
+  
+}
+
+
+# ANOVA
+ind <- grep("^aov", names(master_data))
+master_data[ind] 
+
+# accession_name HSD
+ind_HSD <- grep("^HSD_geno", names(master_data))
+master_data[ind_HSD] 
+
+# trial_name HSD
+loca_HSD <- grep("^HSD_loca", names(master_data))
+master_data[loca_HSD]
+
+```
+
+## Mean Barplot
+
+```{r}
+library(data.table)
+mean_geno <- master_data[ind_HSD] %>% rbindlist()
+
+mean_geno %>% ggplot(aes(x = fct_reorder(accession_name, trait), 
+             y = mean)) +
+  facet_wrap(~trait, scales = "free_y") +
+  geom_col(col = "black") +
+  scale_fill_jco() +
+  geom_text(aes(label = groups), vjust = 1) +
+  labs(x = NULL, y = " ") +
+  theme_xiaofei() +
+  theme(axis.text.x = element_text(vjust = 1))   
+
+# ggsave(paste("images\\mean", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+#      units = "in", dpi = 300, width = 15, height = 10
+#    )
+
+## for loop
+
+for(i in 1: length(master_data[ind_HSD])){
+  
+  # Select current dataframe
+  current_df <- master_data[ind_HSD][[i]]
+  
+  # Set limits
+  y_max = max(current_df$mean, na.rm = TRUE) * 1.2
+  y_min = 0
+  
+  # Built barplot
+    plot_box = ggplot(current_df, aes(x = fct_reorder(accession_name, mean), 
+                                      y = mean))+
+      geom_col(col = "black") +
+      coord_cartesian(ylim = c(y_min, y_max))+
+      scale_fill_jco() + 
+      geom_text(aes(label = groups), vjust = -0.3) + 
+      labs(x = NULL, y = unique(current_df$trait)) + 
+      theme_xiaofei() +
+      theme(axis.text.x = element_text(vjust = 1)) 
+    
+    # Print out barplots
+    plot(plot_box) 
+    
+    # Save barplots
+    # ggsave(paste("images/", unique(current_df$trait), pop, trial_interest, Sys.Date(), ".png", sep = "_")  , plot_box, width = 6, height = 4)
+}
+
+```
+
+
+## Save the master data results
+
+```{r}
+folder_output <- here::here("output//")
+meta_file_name <- paste0(folder_output, paste("2022", trial_interest, "master_results", pop, Sys.Date(), ".xlsx", sep = "_"))
+
+write.xlsx(master_data, file = meta_file_name)
+
+# It is neccessary change some elements names from master_file
+grep("^HSD_geno_root_number_commercial_CQ", names(master_data))
+names(master_data)[22] <- "HSD_geno_root_number_com"
+
+grep("^HSD_loca_root_number_commercial_CQ", names(master_data))
+names(master_data)[23] <- "HSD_loca_root_number_com"
+
+
+grep("^HSD_geno_root_constriction1_3_CQ", names(master_data))
+names(master_data)[37] <- "HSD_geno_root_contric"
+
+grep("^HSD_loca_root_constriction1_3_CQ", names(master_data))
+names(master_data)[38] <- "HSD_loca_root_contric"
+
+write.xlsx(master_data, file = meta_file_name)
+```
