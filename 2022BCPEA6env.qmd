@@ -107,8 +107,8 @@ print(meta_col)
 
 ```{r}
 
-# trial_tidy_all <- 
-#   trial_tidy_all %>% filter(!trial_name %in% c("201784BCPRC_cpal", "201895BCPRC_cpal"))
+trial_tidy_all <-
+  trial_tidy_all %>% filter(!trial_name %in% c("201783CQPRC_cpal", "201894CQPRC_cpal"))
 
 #pop = "CQ"
 pop = "BC"
@@ -187,14 +187,14 @@ plot_bxp <- trial_rm_sd %>%
     axis.text.y = element_text(size = 8),
     plot.title = element_text(color = "black"),
     strip.text.x = element_text(
-      size = 5, face = "bold.italic")
+      size = 9, face = "bold.italic")
   ) 
 plot_bxp <- plot_bxp + 
   theme(strip.text.y = element_text(size = 5))
 
-# ggsave(paste("images\\boxplot", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
-#     plot = plot_bxp, units = "in", dpi = 300, width = 20, height = 16
-#   )
+ggsave(paste("images\\boxplot", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+    plot = plot_bxp, units = "in", dpi = 300, width = 14, height = 16
+  )
 ```
 
 
@@ -202,6 +202,8 @@ plot_bxp <- plot_bxp +
 # Genotypic correlation (Phenotypic values)
 
 ```{r}
+trait_ideal <- trait_ideal[!trait_ideal %in% c("root_number_non_commercial", "frogskin1_5")]
+
 correlation <- gg_cor(
   colours = c("red", "white", "blue"),
   data = trial_rm_sd[, trait_ideal],
@@ -237,8 +239,8 @@ my_dat$trial_name %>% unique()
 
 shared <- plot(results, type = "connectivity")
 
-# ggsave(paste('images\\shared_', trial_interest, pop, Sys.Date(), ".png", sep = "_"),
-#        plot = shared, units = "in", dpi = 300, width = 8, height = 6)
+ggsave(paste('images\\shared_', trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+       plot = shared, units = "in", dpi = 300, width = 8, height = 6)
 
 summary <- results$summ_traits 
 
@@ -251,9 +253,9 @@ p1 <- summary %>%
   theme(axis.text.x = element_text(hjust = 1 , angle = 45, size = 16),
         axis.text.y = element_text(size = 16))
 p1
-# ggsave(paste("images\\missing_", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
-#      plot = p1, units = "in", dpi = 300, width = 15, height = 6
-#    )
+ggsave(paste("images\\missing_", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+     plot = p1, units = "in", dpi = 300, width = 15, height = 6
+   )
 master_data[[paste("summ_traits", pop, sep = "_")]] <- summary
 ```
 
@@ -272,13 +274,14 @@ my_dat <- my_dat %>%
 
 
 # List of variables for ANOVA
-variables <- trait_ideal[-c(5, 9)]
+variables <- trait_ideal[-c(14, 16)]
 
 # Run ANOVA for each variable using a for loop
 for (variable in variables) {
   
   eqt_fixed <- reformulate(c("accession_name", "trial_name", "accession_name:trial_name", "rep_number", 
-                           "rep_number:row_fct", "rep_number:col_fct"), 
+                           "rep_number:row_fct", "rep_number:col_fct"
+                           ), 
                          response = variable)
   
   # Run ANOVA and 
@@ -292,20 +295,21 @@ for (variable in variables) {
   # Store the result in the list
   # anova tables
   master_data[[paste("aov", variable, pop, sep = "_") ]] <- 
+    #summary(anova_result)
     tidy(anova_result) %>% mutate(across(where(is.double), round, 3))
   
   #HSD clones
-  master_data[[paste("HSD_geno", variable, pop, sep = "_") ]] <- 
-    out$groups %>% rownames_to_column("accession_name") %>% 
-    pivot_longer(variable, names_to = "trait", values_to = "mean") %>% 
+  master_data[[paste("HSD_geno", variable, pop, sep = "_") ]] <-
+    out$groups %>% rownames_to_column("accession_name") %>%
+    pivot_longer(variable, names_to = "trait", values_to = "mean") %>%
     mutate(across(where(is.double), round, 3))
   
   # HSD localities
-  master_data[[paste("HSD_loca", variable, pop, sep = "_") ]] <- 
-    out_trial$groups %>% rownames_to_column("trial_name") %>% 
+  master_data[[paste("HSD_loca", variable, pop, sep = "_") ]] <-
+    out_trial$groups %>% rownames_to_column("trial_name") %>%
     mutate(across(where(is.double), round, 3))
-  
 }
+
 
 
 # ANOVA
@@ -321,6 +325,39 @@ loca_HSD <- grep("^HSD_loca", names(master_data))
 master_data[loca_HSD]
 
 ```
+
+```{r}
+
+# Ammi analysis for yield
+ammi_model <- performs_ammi(my_dat, trial_name, accession_name, rep_number, yield_ha)
+
+# biplot
+plot_scores(ammi_model)
+
+a <- plot_scores(ammi_model, 
+                 type = 2, 
+                 polygon = T,
+                 axis.expand = 1.5) +
+  labs(title = "AMMI Biplot yield (t/ha)")
+plot(a)
+
+# Ammi analysis for DM
+ammi_mode_DM <- performs_ammi(my_dat, trial_name, accession_name, rep_number, DM_gravity)
+
+# biplot
+plot_scores(ammi_mode_DM)
+
+b <- plot_scores(ammi_mode_DM, 
+                 type = 2, 
+                 polygon = T,
+                 axis.expand = 1.5) +
+  labs(title = "AMMI Biplot Dry matter content (%)")
+
+
+plot(b)
+
+```
+
 
 ## Mean Barplot
 
