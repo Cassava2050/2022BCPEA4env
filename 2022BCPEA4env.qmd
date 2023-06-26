@@ -1,6 +1,5 @@
 # Data analysis Biofortified Cassava Andean region
 
-
 ```{r}
 rm(list = ls())
 library(pacman)
@@ -114,7 +113,6 @@ trial_tidy_all <-
 pop = "BC"
 ```
 
-
 ## Cooking quality population
 
 ```{r}
@@ -127,13 +125,12 @@ if(pop == "CQ") {
 }
 ```
 
-## Evaluated clones 
+## Evaluated clones
 
 ```{r}
 trial_tidy$accession_name %>% unique() %>% as.data.frame() %>% 
   write.table("clipboard", sep = "\t", col.names = T, row.names = F)
 ```
-
 
 ## Check the SD of each trait
 
@@ -196,8 +193,6 @@ ggsave(paste("images\\boxplot", trial_interest, pop, Sys.Date(), ".png", sep = "
     plot = plot_bxp, units = "in", dpi = 300, width = 14, height = 16
   )
 ```
-
-
 
 # Genotypic correlation (Phenotypic values)
 
@@ -326,38 +321,56 @@ master_data[loca_HSD]
 
 ```
 
+## AMMI analysis to DM and yield
+
 ```{r}
 
 # Ammi analysis for yield
 ammi_model <- performs_ammi(my_dat, trial_name, accession_name, rep_number, yield_ha)
 
+master_data[["AMMI_yield"]] <- ammi_model$yield_ha$ANOVA
+
 # biplot
-plot_scores(ammi_model)
+plot_scores(ammi_model) +
+  labs(title = "AMMI1 Biplot yield (t/ha)")
+
+# Save barplots
+ggsave(paste("images/", "biplot1_yield", pop, trial_interest, Sys.Date(), ".png", sep = "_"), width = 6, height = 4)
 
 a <- plot_scores(ammi_model, 
                  type = 2, 
                  polygon = T,
                  axis.expand = 1.5) +
-  labs(title = "AMMI Biplot yield (t/ha)")
+  labs(title = "AMMI2 Biplot yield (t/ha)")
 plot(a)
+
+# Save barplots
+    ggsave(paste("images/", "biplot2_yield", pop, trial_interest, Sys.Date(), ".png", sep = "_")  , a, width = 6, height = 4)
 
 # Ammi analysis for DM
 ammi_mode_DM <- performs_ammi(my_dat, trial_name, accession_name, rep_number, DM_gravity)
 
+master_data[["AMMI_DM_gravity"]] <- ammi_mode_DM$DM_gravity$ANOVA
+
 # biplot
-plot_scores(ammi_mode_DM)
+plot_scores(ammi_mode_DM) +
+  labs(title = "AMMI1 Biplot Dry matter content (%)")
+
+# Save barplots
+ggsave(paste("images/", "biplot1_DM", pop, trial_interest, Sys.Date(), ".png", sep = "_"), width = 6, height = 4)
 
 b <- plot_scores(ammi_mode_DM, 
                  type = 2, 
                  polygon = T,
                  axis.expand = 1.5) +
-  labs(title = "AMMI Biplot Dry matter content (%)")
-
+  labs(title = "AMMI2 Biplot Dry matter content (%)")
 
 plot(b)
 
-```
+    ggsave(paste("images/", "biplot2_DM", pop, trial_interest, Sys.Date(), ".png", sep = "_")  , b, width = 6, height = 4)
 
+  
+```
 
 ## Mean Barplot
 
@@ -375,9 +388,9 @@ mean_geno %>% ggplot(aes(x = fct_reorder(accession_name, trait),
   theme_xiaofei() +
   theme(axis.text.x = element_text(vjust = 1))   
 
-# ggsave(paste("images\\mean", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
-#      units = "in", dpi = 300, width = 15, height = 10
-#    )
+ggsave(paste("images\\mean", trial_interest, pop, Sys.Date(), ".png", sep = "_"),
+     units = "in", dpi = 300, width = 15, height = 10
+   )
 
 ## for loop
 
@@ -405,11 +418,10 @@ for(i in 1: length(master_data[ind_HSD])){
     plot(plot_box) 
     
     # Save barplots
-    # ggsave(paste("images/", unique(current_df$trait), pop, trial_interest, Sys.Date(), ".png", sep = "_")  , plot_box, width = 6, height = 4)
+    ggsave(paste("images/", unique(current_df$trait), pop, trial_interest, Sys.Date(), ".png", sep = "_")  , plot_box, width = 6, height = 4)
 }
 
 ```
-
 
 ## Save the master data results
 
@@ -420,17 +432,17 @@ meta_file_name <- paste0(folder_output, paste("2022", trial_interest, "master_re
 write.xlsx(master_data, file = meta_file_name)
 
 # It is neccessary change some elements names from master_file
-grep("^HSD_geno_root_number_commercial_CQ", names(master_data))
+grep("^HSD_geno_root_number_commercial_BC", names(master_data))
 names(master_data)[22] <- "HSD_geno_root_number_com"
 
-grep("^HSD_loca_root_number_commercial_CQ", names(master_data))
+grep("^HSD_loca_root_number_commercial_BC", names(master_data))
 names(master_data)[23] <- "HSD_loca_root_number_com"
 
 
-grep("^HSD_geno_root_constriction1_3_CQ", names(master_data))
+grep("^HSD_geno_root_constriction1_3_BC", names(master_data))
 names(master_data)[37] <- "HSD_geno_root_contric"
 
-grep("^HSD_loca_root_constriction1_3_CQ", names(master_data))
+grep("^HSD_loca_root_constriction1_3_BC", names(master_data))
 names(master_data)[38] <- "HSD_loca_root_contric"
 
 write.xlsx(master_data, file = meta_file_name)
